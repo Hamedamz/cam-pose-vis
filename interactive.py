@@ -29,6 +29,7 @@ class VisualizerApp:
         self.root = root
         self.directory = directory
         self._is_playing = True
+        self.orientations = None
 
         # Load JSON log file
         json_files = [f for f in os.listdir(directory) if f.endswith('.json')]
@@ -71,7 +72,9 @@ class VisualizerApp:
 
         # Extract positions for plotting
         self.positions = np.array([self.frames[fid]["tvec"] for fid in self.frame_ids])
-        self.orientations = np.array([self.frames[fid]["yaw_pitch_roll"] for fid in self.frame_ids])
+
+        if "yaw_pitch_roll" in self.frames[fid]:
+            self.orientations = np.array([self.frames[fid]["yaw_pitch_roll"] for fid in self.frame_ids])
 
         # Setup matplotlib figure and axes
         self.fig = plt.figure(figsize=(14, 9))
@@ -109,9 +112,10 @@ class VisualizerApp:
         self.ax_ori.set_ylabel('Orientation (rad)')
         self.ori_lines = {}
         labels = ['Roll', 'Pitch', 'Yaw']
-        for i, c in enumerate(labels):
-            line, = self.ax_ori.plot(self.frame_ids, self.orientations[:, i], label=c, color=colors[i])
-            self.ori_lines[c] = line
+        if self.orientations is not None:
+            for i, c in enumerate(labels):
+                line, = self.ax_ori.plot(self.frame_ids, self.orientations[:, i], label=c, color=colors[i])
+                self.ori_lines[c] = line
         self.ax_ori.legend()
         self.cursor_ori = self.ax_ori.axvline(self.frame_ids[0], color='k', linestyle='--')
         self.text_ori = self.ax_ori.text(0.02, 0.95, '', transform=self.ax_ori.transAxes, va='top')
@@ -188,8 +192,11 @@ class VisualizerApp:
         frame = self.frames.get(fid, None)
         if frame is not None:
             p = np.array(frame["tvec"])
-            o = frame["yaw_pitch_roll"]
-            R = euler_to_rotation_matrix(*o)
+            if self.orientations is not None:
+                o = frame["yaw_pitch_roll"]
+                R = euler_to_rotation_matrix(*o)
+            else:
+                R = euler_to_rotation_matrix(0, 0, 0)
             L = self.pose_axis_length
 
             # X axis (red)
@@ -241,9 +248,10 @@ class VisualizerApp:
         self.text_pos.set_text(f'X={pos[0]:.3f}, Y={pos[1]:.3f}, Z={pos[2]:.3f}')
 
         # Update orientation cursor line & text
-        self.cursor_ori.set_xdata([x])
-        ori = self.orientations[self.current_index]
-        self.text_ori.set_text(f'Roll={ori[0]:.3f}, Pitch={ori[1]:.3f}, Yaw={ori[2]:.3f}')
+        if self.orientations is not None:
+            self.cursor_ori.set_xdata([x])
+            ori = self.orientations[self.current_index]
+            self.text_ori.set_text(f'Roll={ori[0]:.3f}, Pitch={ori[1]:.3f}, Yaw={ori[2]:.3f}')
 
         self.canvas.draw_idle()
 
@@ -252,7 +260,8 @@ def main():
     root = tk.Tk()
     root.title("3D Pose and Video Viewer")
 
-    folder = filedialog.askdirectory(title="Select directory with JSON and frames")
+    # folder = filedialog.askdirectory(title="Select directory with JSON and frames")
+    folder = "vicon"
     if not folder:
         print("No folder selected, exiting.")
         return
