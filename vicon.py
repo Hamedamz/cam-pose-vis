@@ -11,8 +11,15 @@ import matplotlib
 
 matplotlib.use('TkAgg')
 
+# with tune vel:
+# logs/vicon_09_40_19_08_06_2025.json
+# logs/vicon_09_46_28_08_06_2025.json 10% higher PID
+# with minimized pid
+# logs/vicon_09_42_48_08_06_2025.json
+
 show_markers = False
-load_csv = 0
+aspect_equal = False
+load_csv = False
 
 if load_csv:
     # --- Load the CSV ---
@@ -24,14 +31,17 @@ if load_csv:
     x, y, z = df['TX'].values/1000, df['TY'].values/1000, df['TZ'].values/1000
 
 else:
-    dir = "/Users/hamed/Documents/Holodeck/fls_prototype/FLS/quality_metric/fls1_vicon_2/"
-    with open(dir + "N_vicon_10_06_30_07_25_2025.json", 'r') as f:  # cf
+    dir = "vicon/"
+    # dir = "/Users/hamed/Desktop/logs_2/"
+    with open(dir + "vicon_09_40_19_08_06_2025.json", 'r') as f:  # cf
         frames = json.load(f)["frames"]
 
+    scale = 1
+
     print(len(frames), frames[0], frames[-1])
-    x = [frame["tvec"][0] for frame in frames]
-    y = [frame["tvec"][1] for frame in frames]
-    z = [frame["tvec"][2] for frame in frames]
+    x = [frame["tvec"][0] * scale for frame in frames]
+    y = [frame["tvec"][1] * scale for frame in frames]
+    z = [frame["tvec"][2] * scale for frame in frames]
 
 
 # --- Create gradient segments ---
@@ -50,6 +60,10 @@ fig = plt.figure(figsize=(12, 7))
 ax = fig.add_subplot(121, projection='3d')
 plt.subplots_adjust(bottom=0.3)
 
+ax_stats = fig.add_subplot(122)
+ax_stats.axis('off')  # Hide axes
+stats_text = ax_stats.text(0, 1, '', verticalalignment='top', fontsize=10, family='monospace')
+
 lc = Line3DCollection(segments, colors=colors, linewidth=2)
 ax.add_collection3d(lc)
 
@@ -57,21 +71,21 @@ if show_markers:
     start_marker = ax.scatter(x[0], y[0], z[0], color='green', s=50, label='Start')
     end_marker = ax.scatter(x[-1], y[-1], z[-1], color='red', s=50, label='End')
 
-ax.set_xlabel('TX (m)')
-ax.set_ylabel('TY (m)')
-ax.set_zlabel('TZ (m)')
+ax.set_xlabel('TX (mm)')
+ax.set_ylabel('TY (mm)')
+ax.set_zlabel('TZ (mm)')
 # ax.set_title('Flight Path')
 # ax.legend()
 # Hide x-axis components
-ax.set_yticks([])          # remove ticks
-ax.set_yticklabels([])     # remove tick labels
-ax.yaxis.line.set_color((0.0, 0.0, 0.0, 0.0))  # make axis line transparent
+# ax.set_yticks([])          # remove ticks
+# ax.set_yticklabels([])     # remove tick labels
+# ax.yaxis.line.set_color((0.0, 0.0, 0.0, 0.0))  # make axis line transparent
 
 ax.set_xlim(np.min(x), np.max(x))
 ax.set_ylim(np.min(y), np.max(y))
 ax.set_zlim(np.min(z), np.max(z))
-ax.set_box_aspect([np.ptp(x), np.ptp(y), np.ptp(z)])
-
+# ax.set_box_aspect([np.ptp(x), np.ptp(y), np.ptp(z)])
+# ax.set_aspect('equal')
 # --- Range Slider ---
 ax_slider = plt.axes([0.25, 0.2, 0.65, 0.03])
 slider = RangeSlider(ax_slider, 'Frame Range', 0, len(x) - 2, valinit=(0, len(x) - 2), valstep=1)
@@ -90,6 +104,14 @@ def update(val):
     if show_markers:
         start_marker._offsets3d = ([x_trim[0]], [y_trim[0]], [z_trim[0]])
         end_marker._offsets3d = ([x_trim[-1]], [y_trim[-1]], [z_trim[-1]])
+
+        # Compute min/max
+    stats = f"""
+X: [{min(x_trim):.3f}, {max(x_trim):.3f}]
+Y: [{min(y_trim):.3f}, {max(y_trim):.3f}]
+Z: [{min(z_trim):.3f}, {max(z_trim):.3f}]
+    """.strip()
+    stats_text.set_text(stats)
 
     fig.canvas.draw_idle()
 
@@ -212,6 +234,29 @@ def save_figure(event):
 
     fig.canvas.draw()
 
+
+def toggle_aspect(event):
+    global aspect_equal
+    if aspect_equal:
+        # Auto aspect (Matplotlib default behavior)
+        ax.set_box_aspect(None)
+    else:
+        # Equal aspect: scale x, y, z equally
+        ax.set_box_aspect([np.ptp(x), np.ptp(y), np.ptp(z)])
+
+    aspect_equal = not aspect_equal
+    fig.canvas.draw_idle()
+
+# def toggle_aspect(event):
+#     global aspect_equal
+#     if aspect_equal:
+#         ax.set_aspect('auto')
+#     else:
+#         ax.set_aspect('equal')
+#     aspect_equal = not aspect_equal
+#     fig.canvas.draw_idle()
+
+
 view_buttons = [make_view_button(label, elev, azim, pos) for label, elev, azim, pos in btns_info]
 
 # Button placement
@@ -219,5 +264,8 @@ ax_btn_save = plt.axes([0.7, 0.13, 0.1, 0.04])
 btn_save = Button(ax_btn_save, 'Save Figure')
 btn_save.on_clicked(save_figure)
 
+ax_btn_aspect = plt.axes([0.82, 0.13, 0.12, 0.04])
+btn_aspect = Button(ax_btn_aspect, 'Toggle Aspect')
+btn_aspect.on_clicked(toggle_aspect)
 
 plt.show()
